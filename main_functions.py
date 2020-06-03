@@ -279,6 +279,27 @@ def remove_high_corrs(resultive_df):
          'application__FLOORSMIN_AVG']
     resultive_df.drop(high_corrs_cols, axis=1, inplace=True)
 
+def add_complex_application_features(df):
+    new_feature_names = []
+    for agg, func in zip(
+            ['min', 'max', 'mean', 'nanmedian'], [np.min, np.max, np.mean, np.nanmedian]):
+        feature = 'application__EXT_SOURCES_{}'.format(agg)
+        new_feature_names.append(feature)
+        df[feature] = func(
+                df[[
+                    'application__EXT_SOURCE_1', 
+                    'application__EXT_SOURCE_2', 
+                    'application__EXT_SOURCE_3']], axis=1)
+    for features in [('AMT_CREDIT', 'AMT_ANNUITY'), ('AMT_CREDIT', 'AMT_GOODS_PRICE'),
+                     ('AMT_INCOME_TOTAL', 'AMT_ANNUITY'), ('AMT_INCOME_TOTAL', 'AMT_CREDIT'),
+                     ('AMT_INCOME_TOTAL', 'AMT_GOODS_PRICE'), ('AMT_INCOME_TOTAL', 'DAYS_BIRTH'),
+                     ('AMT_CREDIT', 'DAYS_BIRTH'), ('AMT_ANNUITY', 'AMT_GOODS_PRICE')]:
+        f1, f2 = features
+        new_feature_names.append('application__{}_TO_{}'.format(f1, f2))
+        df['application__{}_TO_{}'.format(f1, f2)] = df['application__{}'.format(f1)] /\
+                                                        df['application__{}'.format(f2)]
+    return new_feature_names
+    
 def build_training_data_for_application(application_df, quantile_dict=None):
     # quantile_dict is None -> train, quantile_dict is not None -> test
     qd = {}
@@ -714,8 +735,9 @@ def build_training_data_for_application(application_df, quantile_dict=None):
     #106#######################################################################
     
     ###########################################################################
+    features = add_complex_application_features(resultive_df)
     resultive_df = resultive_df[application_features_categorical +\
-                                application_features_numeric]
+                                application_features_numeric + features]
     remove_low_iv_cols(resultive_df)
     remove_high_corrs(resultive_df)
     ###########################################################################
@@ -742,6 +764,36 @@ BUREAU_NUMERIC_FEATURES = [
     'DAYS_CREDIT_UPDATE',
     'AMT_ANNUITY',
 ]
+
+def bureau_remove_low_iv(df):
+    low_iv_features = [
+        'bureau___CREDIT_DAY_OVERDUE_median',
+        'bureau___CREDIT_DAY_OVERDUE_mean',
+        'bureau___CREDIT_DAY_OVERDUE_max',
+        'bureau___CREDIT_DAY_OVERDUE_min',
+        'bureau___CREDIT_DAY_OVERDUE_sum',
+        'bureau___AMT_CREDIT_MAX_OVERDUE_median',
+        'bureau___AMT_CREDIT_MAX_OVERDUE_min',
+        'bureau___CNT_CREDIT_PROLONG_median',
+        'bureau___CNT_CREDIT_PROLONG_mean',
+        'bureau___CNT_CREDIT_PROLONG_max',
+        'bureau___CNT_CREDIT_PROLONG_min',
+        'bureau___CNT_CREDIT_PROLONG_sum',
+        'bureau___AMT_CREDIT_SUM_DEBT_min',
+        'bureau___AMT_CREDIT_SUM_LIMIT_median',
+        'bureau___AMT_CREDIT_SUM_LIMIT_mean',
+        'bureau___AMT_CREDIT_SUM_LIMIT_max',
+        'bureau___AMT_CREDIT_SUM_LIMIT_sum',
+        'bureau___AMT_CREDIT_SUM_OVERDUE_median',
+        'bureau___AMT_CREDIT_SUM_OVERDUE_mean',
+        'bureau___AMT_CREDIT_SUM_OVERDUE_max',
+        'bureau___AMT_CREDIT_SUM_OVERDUE_min',
+        'bureau___AMT_CREDIT_SUM_OVERDUE_sum',
+        'bureau___AMT_ANNUITY_min',
+        'bureau___AMT_ANNUITY_sum',
+    ]
+    df.drop(low_iv_features, axis=1, inplace=True)
+    return low_iv_features
 
 def add_bureau_features(df, bureau):
     bureau_features = []
@@ -784,8 +836,196 @@ def add_bureau_features(df, bureau):
     df = df.merge(end_date_passed_credits_count, on='SK_ID_CURR', how='left')
     df['bureau___end_date_passed_credits_count'] = df['bureau___end_date_passed_credits_count'].fillna(0)
     df['bureau___end_date_passed_credits_rate'] = df['bureau___end_date_passed_credits_count'] / df['bureau___previous_credits_count']
+    deleted_cols = bureau_remove_low_iv(df)
+    bureau_features = list(set(bureau_features) - set(deleted_cols))
     return df, bureau_features
     
+def ccb_remove_low_iv(df):
+    low_iv_features = [
+        'ccb__AMT_CREDIT_LIMIT_ACTUAL_median',
+        'ccb__AMT_CREDIT_LIMIT_ACTUAL_min',
+        'ccb__AMT_CREDIT_LIMIT_ACTUAL_sum',
+        'ccb__AMT_DRAWINGS_ATM_CURRENT_median',
+        'ccb__AMT_DRAWINGS_ATM_CURRENT_mean',
+        'ccb__AMT_DRAWINGS_ATM_CURRENT_max',
+        'ccb__AMT_DRAWINGS_ATM_CURRENT_sum',
+        'ccb__AMT_DRAWINGS_CURRENT_median',
+        'ccb__AMT_DRAWINGS_CURRENT_mean',
+        'ccb__AMT_DRAWINGS_CURRENT_max',
+        'ccb__AMT_DRAWINGS_CURRENT_min',
+        'ccb__AMT_DRAWINGS_CURRENT_sum',
+        'ccb__AMT_DRAWINGS_OTHER_CURRENT_median',
+        'ccb__AMT_DRAWINGS_OTHER_CURRENT_mean',
+        'ccb__AMT_DRAWINGS_OTHER_CURRENT_max',
+        'ccb__AMT_DRAWINGS_OTHER_CURRENT_min',
+        'ccb__AMT_DRAWINGS_OTHER_CURRENT_sum',
+        'ccb__AMT_DRAWINGS_POS_CURRENT_median',
+        'ccb__AMT_DRAWINGS_POS_CURRENT_mean',
+        'ccb__AMT_DRAWINGS_POS_CURRENT_max',
+        'ccb__AMT_DRAWINGS_POS_CURRENT_min',
+        'ccb__AMT_DRAWINGS_POS_CURRENT_sum',
+        'ccb__AMT_INST_MIN_REGULARITY_median',
+        'ccb__AMT_INST_MIN_REGULARITY_mean',
+        'ccb__AMT_INST_MIN_REGULARITY_max',
+        'ccb__AMT_INST_MIN_REGULARITY_min',
+        'ccb__AMT_INST_MIN_REGULARITY_sum',
+        'ccb__AMT_PAYMENT_CURRENT_median',
+        'ccb__AMT_PAYMENT_CURRENT_mean',
+        'ccb__AMT_PAYMENT_CURRENT_max',
+        'ccb__AMT_PAYMENT_CURRENT_min',
+        'ccb__AMT_PAYMENT_CURRENT_sum',
+        'ccb__AMT_PAYMENT_TOTAL_CURRENT_median',
+        'ccb__AMT_PAYMENT_TOTAL_CURRENT_mean',
+        'ccb__AMT_PAYMENT_TOTAL_CURRENT_max',
+        'ccb__AMT_PAYMENT_TOTAL_CURRENT_min',
+        'ccb__AMT_PAYMENT_TOTAL_CURRENT_sum',
+        'ccb__AMT_RECEIVABLE_PRINCIPAL_median',
+        'ccb__AMT_RECEIVABLE_PRINCIPAL_mean',
+        'ccb__AMT_RECEIVABLE_PRINCIPAL_max',
+        'ccb__AMT_RECEIVABLE_PRINCIPAL_min',
+        'ccb__AMT_RECEIVABLE_PRINCIPAL_sum',
+        'ccb__AMT_RECIVABLE_median',
+        'ccb__AMT_RECIVABLE_mean',
+        'ccb__AMT_RECIVABLE_max',
+        'ccb__AMT_RECIVABLE_sum',
+        'ccb__AMT_TOTAL_RECEIVABLE_median',
+        'ccb__AMT_TOTAL_RECEIVABLE_mean',
+        'ccb__AMT_TOTAL_RECEIVABLE_max',
+        'ccb__AMT_TOTAL_RECEIVABLE_sum',
+        'ccb__CNT_DRAWINGS_ATM_CURRENT_mean',
+        'ccb__CNT_DRAWINGS_ATM_CURRENT_sum',
+        'ccb__CNT_DRAWINGS_CURRENT_median',
+        'ccb__CNT_DRAWINGS_CURRENT_mean',
+        'ccb__CNT_DRAWINGS_CURRENT_max',
+        'ccb__CNT_DRAWINGS_CURRENT_sum',
+        'ccb__CNT_DRAWINGS_OTHER_CURRENT_median',
+        'ccb__CNT_DRAWINGS_OTHER_CURRENT_mean',
+        'ccb__CNT_DRAWINGS_OTHER_CURRENT_max',
+        'ccb__CNT_DRAWINGS_OTHER_CURRENT_min',
+        'ccb__CNT_DRAWINGS_OTHER_CURRENT_sum',
+        'ccb__CNT_DRAWINGS_POS_CURRENT_median',
+        'ccb__CNT_DRAWINGS_POS_CURRENT_mean',
+        'ccb__CNT_DRAWINGS_POS_CURRENT_max',
+        'ccb__CNT_DRAWINGS_POS_CURRENT_sum',
+        'ccb__CNT_INSTALMENT_MATURE_CUM_median',
+        'ccb__CNT_INSTALMENT_MATURE_CUM_mean',
+        'ccb__CNT_INSTALMENT_MATURE_CUM_max',
+        'ccb__CNT_INSTALMENT_MATURE_CUM_sum',
+        'ccb__SK_DPD_median',
+        'ccb__SK_DPD_mean',
+        'ccb__SK_DPD_max',
+        'ccb__SK_DPD_min',
+        'ccb__SK_DPD_sum',
+        'ccb__SK_DPD_DEF_median',
+        'ccb__SK_DPD_DEF_mean',
+        'ccb__SK_DPD_DEF_min',
+        'ccb__SK_DPD_DEF_sum',
+    ]
+    df.drop(low_iv_features, axis=1, inplace=True)
+    return low_iv_features
     
+def add_ccb_features(df, ccb):
+    ccb_cols = []
+    ccb_cols.append('ccb__previous_credits_count')
+    ccb1 = ccb.groupby('SK_ID_CURR', as_index=False)['SK_ID_PREV'].count().rename(
+        columns = {'SK_ID_PREV': 'ccb__previous_credits_count'})
+    df = df.merge(ccb1, on='SK_ID_CURR', how='left')
+    df['ccb__previous_credits_count'] = df['ccb__previous_credits_count'].fillna(0)
+    CCB_NUMERIC_FEATURES = [
+        'SK_ID_CURR',
+        'AMT_CREDIT_LIMIT_ACTUAL',
+        'AMT_DRAWINGS_ATM_CURRENT',
+        'AMT_DRAWINGS_CURRENT',
+        'AMT_DRAWINGS_OTHER_CURRENT',
+        'AMT_DRAWINGS_POS_CURRENT',
+        'AMT_INST_MIN_REGULARITY',
+        'AMT_PAYMENT_CURRENT',
+        'AMT_PAYMENT_TOTAL_CURRENT',
+        'AMT_RECEIVABLE_PRINCIPAL',
+        'AMT_RECIVABLE',
+        'AMT_TOTAL_RECEIVABLE',
+        'CNT_DRAWINGS_ATM_CURRENT',
+        'CNT_DRAWINGS_CURRENT',
+        'CNT_DRAWINGS_OTHER_CURRENT',
+        'CNT_DRAWINGS_POS_CURRENT',
+        'CNT_INSTALMENT_MATURE_CUM',
+        'SK_DPD',
+        'SK_DPD_DEF',
+    ]
+    ccb_numerical_stats = ccb[CCB_NUMERIC_FEATURES].\
+        groupby('SK_ID_CURR', as_index = False).\
+        agg(['median', 'mean', 'max', 'min', 'sum']).reset_index()
+    new_cols = []
+    for feature in ccb_numerical_stats.columns.levels[0]:
+        if feature == 'SK_ID_CURR':
+            continue
+        for stat in ccb_numerical_stats.columns.levels[1][:-1]:
+            new_cols.append('ccb__{}_{}'.format(feature, stat))
+    
+    for feature in ccb_numerical_stats.columns:  
+        ql, qr = ccb_numerical_stats[feature].quantile(0.01), ccb_numerical_stats[feature].quantile(0.99)
+        ccb_numerical_stats.loc[ccb_numerical_stats[feature] > qr, feature] = qr
+        ccb_numerical_stats.loc[ccb_numerical_stats[feature] < ql, feature] = ql
+    ccb_numerical_stats.columns = ['SK_ID_CURR'] + new_cols
+    df = df.merge(ccb_numerical_stats, on='SK_ID_CURR', how='left')
+    df[new_cols] = df[new_cols].fillna(0)
+    ccb_cols += new_cols
+    deleted_cols = ccb_remove_low_iv(df)
+    ccb_cols = list(set(ccb_cols) - set(deleted_cols))
+    return df, ccb_cols
+
+def pos_cash_remove_low_iv(df):
+    low_iv_features = [
+        'pos_cash__CNT_INSTALMENT_max',
+        'pos_cash__CNT_INSTALMENT_FUTURE_max',
+        'pos_cash__SK_DPD_median',
+        'pos_cash__SK_DPD_mean',
+        'pos_cash__SK_DPD_max',
+        'pos_cash__SK_DPD_min',
+        'pos_cash__SK_DPD_sum',
+        'pos_cash__SK_DPD_DEF_median',
+        'pos_cash__SK_DPD_DEF_mean',
+        'pos_cash__SK_DPD_DEF_min',
+        'pos_cash__SK_DPD_DEF_sum',
+    ]
+    df.drop(low_iv_features, axis=1, inplace=True)
+    return low_iv_features
+
+def add_pos_cash_features(df, pos_cash):
+    pos_cash_cols = []
+    pos_cash_cols.append('pos_cash__previous_credits_count')
+    pos_cash1 = pos_cash.groupby('SK_ID_CURR', as_index=False)['SK_ID_PREV'].count().rename(
+        columns = {'SK_ID_PREV': 'pos_cash__previous_credits_count'})
+    df = df.merge(pos_cash1, on='SK_ID_CURR', how='left')
+    df['pos_cash__previous_credits_count'] = df['pos_cash__previous_credits_count'].fillna(0)
+    pos_cash_NUMERIC_FEATURES = [
+        'SK_ID_CURR',
+        'MONTHS_BALANCE',
+        'CNT_INSTALMENT',
+        'CNT_INSTALMENT_FUTURE',
+        'SK_DPD',
+        'SK_DPD_DEF',
+    ]
+    pos_cash_numerical_stats = pos_cash[pos_cash_NUMERIC_FEATURES].\
+        groupby('SK_ID_CURR', as_index = False).\
+        agg(['median', 'mean', 'max', 'min', 'sum']).reset_index()
+    new_cols = []
+    for feature in pos_cash_numerical_stats.columns.levels[0]:
+        if feature == 'SK_ID_CURR':
+            continue
+        for stat in pos_cash_numerical_stats.columns.levels[1][:-1]:
+            new_cols.append('pos_cash__{}_{}'.format(feature, stat))
+    
+    for feature in pos_cash_numerical_stats.columns:  
+        ql, qr = pos_cash_numerical_stats[feature].quantile(0.01), pos_cash_numerical_stats[feature].quantile(0.99)
+        pos_cash_numerical_stats.loc[pos_cash_numerical_stats[feature] > qr, feature] = qr
+        pos_cash_numerical_stats.loc[pos_cash_numerical_stats[feature] < ql, feature] = ql
+    pos_cash_numerical_stats.columns = ['SK_ID_CURR'] + new_cols
+    df = df.merge(pos_cash_numerical_stats, on='SK_ID_CURR', how='left')
+    df[new_cols] = df[new_cols].fillna(0)
+    pos_cash_cols += new_cols
+    deleted_cols = pos_cash_remove_low_iv(df)
+    pos_cash_cols = list(set(pos_cash_cols) - set(deleted_cols))
+    return df, pos_cash_cols
     
     

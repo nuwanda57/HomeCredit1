@@ -1027,5 +1027,91 @@ def add_pos_cash_features(df, pos_cash):
     deleted_cols = pos_cash_remove_low_iv(df)
     pos_cash_cols = list(set(pos_cash_cols) - set(deleted_cols))
     return df, pos_cash_cols
+
+def installments_payment_remove_low_iv(df):
+    low_iv_features = [
+        'installments_payment___NUM_INSTALMENT_NUMBER_min',
+    ]
+    df.drop(low_iv_features, axis=1, inplace=True)
+    return low_iv_features
+
+def add_installments_payment_features(df, ip_df_in):
+    features = []
+
+    # statistics
+    new_cols = []
+    ip_df = ip_df_in.copy(deep=True)
+    installments_payment_numerical_stats = ip_df.drop(columns=['SK_ID_PREV']).groupby('SK_ID_CURR', as_index = False).agg(['median', 'mean', 'max', 'min', 'sum']).reset_index()
+    for feature in installments_payment_numerical_stats.columns.levels[0]:
+        if feature == 'SK_ID_CURR':
+            continue
+        for stat in installments_payment_numerical_stats.columns.levels[1][:-1]:
+            new_cols.append('installments_payment___{}_{}'.format(feature, stat))
+    installments_payment_numerical_stats.columns = ['SK_ID_CURR'] + new_cols
+    features += new_cols
+    df = df.merge(installments_payment_numerical_stats, on='SK_ID_CURR', how='left')
+
+    #days_payment_diff
+    features.append('installments_payment__days_payment_diff')
+    ip_df['installments_payment__days_payment_diff'] = ip_df.DAYS_ENTRY_PAYMENT - ip_df.DAYS_INSTALMENT
+    days_payment_diff = ip_df.groupby('SK_ID_PREV')[['SK_ID_CURR', 'installments_payment__days_payment_diff']].mean().groupby('SK_ID_CURR').mean()
+    df = df.merge(days_payment_diff, on='SK_ID_CURR', how='left')
+    df['installments_payment__days_payment_diff'].fillna(0, inplace=True)
+    #amt_payment_diff
+    features.append('installments_payment__amt_payment_diff')
+    ip_df['installments_payment__amt_payment_diff'] = ip_df.AMT_INSTALMENT - ip_df.AMT_PAYMENT
+    amt_payment_diff = ip_df.groupby('SK_ID_PREV')[['SK_ID_CURR', 'installments_payment__amt_payment_diff']].mean().groupby('SK_ID_CURR').mean()
+    df = df.merge(amt_payment_diff, on='SK_ID_CURR', how='left')
+    df['installments_payment__amt_payment_diff'].fillna(0, inplace=True)
+    deleted_cols = installments_payment_remove_low_iv(df)
+    features = list(set(features) - set(deleted_cols))
+    print(features)
+    return df, features
+
+
+def add_previous_application_features(df, pa):
+    pa_cols = []
+    pa_cols.append('previous_application__previous_credits_count')
+    pa1 = pa.groupby('SK_ID_CURR', as_index=False)['SK_ID_PREV'].count().rename(
+        columns = {'SK_ID_PREV': 'previous_application__previous_credits_count'})
+    df = df.merge(pa1, on='SK_ID_CURR', how='left')
+    df['previous_application__previous_credits_count'] = df['previous_application__previous_credits_count'].fillna(0)
+    pa_NUMERIC_FEATURES = [
+        'SK_ID_CURR',
+        'AMT_ANNUITY',
+        'AMT_APPLICATION',
+        'AMT_CREDIT',
+        'AMT_DOWN_PAYMENT',
+        'AMT_GOODS_PRICE',
+        'RATE_DOWN_PAYMENT',
+        'DAYS_DECISION',
+        'SELLERPLACE_AREA',
+        'CNT_PAYMENT',
+        'DAYS_FIRST_DRAWING',
+        'DAYS_LAST_DUE_1ST_VERSION',
+        'DAYS_LAST_DUE',
+        'DAYS_TERMINATION',
+    ]
+    pa_numerical_stats = pa[pa_NUMERIC_FEATURES].\
+        groupby('SK_ID_CURR', as_index = False).\
+        agg(['median', 'mean', 'max', 'min', 'sum']).reset_index()
+    new_cols = []
+    for feature in pa_numerical_stats.columns.levels[0]:
+        if feature == 'SK_ID_CURR':
+            continue
+        for stat in pa_numerical_stats.columns.levels[1][:-1]:
+            new_cols.append('previous_application__{}_{}'.format(feature, stat))
+    
+    for feature in pa_numerical_stats.columns:  
+        ql, qr = pa_numerical_stats[feature].quantile(0.01), pa_numerical_stats[feature].quantile(0.99)
+        pa_numerical_stats.loc[pa_numerical_stats[feature] > qr, feature] = qr
+        pa_numerical_stats.loc[pa_numerical_stats[feature] < ql, feature] = ql
+    pa_numerical_stats.columns = ['SK_ID_CURR'] + new_cols
+    df = df.merge(pa_numerical_stats, on='SK_ID_CURR', how='left')
+    df[new_cols] = df[new_cols].fillna(0)
+    pa_cols += new_cols
+#     deleted_cols = pa_remove_low_iv(df)
+#     pa_cols = list(set(pa_cols) - set(deleted_cols))
+    return df, pa_cols
     
     
